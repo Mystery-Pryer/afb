@@ -1,0 +1,50 @@
+name: 8C-1F UniMorph Gloss Transform Dry Run
+
+on:
+  push:
+    branches:
+      - feat/checkpoint-8c1f-unimorph-gloss-dry-run
+    paths:
+      - control/mappings/sources/SNP-000004__gloss.json
+      - scripts/processing/transform_unimorph_gloss_subset.py
+      - .github/workflows/dry-run-unimorph-gloss-transform.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned transform dependency
+        run: python -m pip install --disable-pip-version-check pyarrow==21.0.0
+
+      - name: Transform bounded 7-row gloss subset and validate
+        run: |
+          python scripts/processing/transform_unimorph_gloss_subset.py \
+            --source "afb.gloss" \
+            --output-parquet "$RUNNER_TEMP/unimorph_gloss_subset.parquet" \
+            --manifest "$RUNNER_TEMP/unimorph_gloss_dry_run_manifest.json"
+          python -m json.tool "$RUNNER_TEMP/unimorph_gloss_dry_run_manifest.json" >/dev/null
+          test -s "$RUNNER_TEMP/unimorph_gloss_subset.parquet"
+
+      - name: Ensure manifest contains no lexical source payload
+        run: |
+          ! grep -q '"lemma"' "$RUNNER_TEMP/unimorph_gloss_dry_run_manifest.json"
+          ! grep -q '"part_of_speech"' "$RUNNER_TEMP/unimorph_gloss_dry_run_manifest.json"
+          ! grep -q '"english_gloss"' "$RUNNER_TEMP/unimorph_gloss_dry_run_manifest.json"
+
+      - name: Upload validation manifest only
+        uses: actions/upload-artifact@v4
+        with:
+          name: unimorph-gloss-transform-dry-run-manifest
+          path: ${{ runner.temp }}/unimorph_gloss_dry_run_manifest.json
+          retention-days: 14
+          if-no-files-found: error
